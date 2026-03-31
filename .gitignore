@@ -30,3 +30,4 @@ Thumbs.db
 
 # TypeScript cache
 *.tsbuildinfo
+.DS_Store
