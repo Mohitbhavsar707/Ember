@@ -1,0 +1,29 @@
+{
+  "name": "phoenix-lob",
+  "version": "1.0.0",
+  "description": "Limit order book engine — Ellipsis Labs interview project",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "postbuild": "cp -R public dist/public || true",
+    "start": "node dist/server/index.js",
+    "dev": "node --loader ts-node/esm src/server/index.ts",
+    "cli": "node --loader ts-node/esm src/cli.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.11.0",
+    "@types/ws": "^8.5.10",
+    "@vitest/coverage-v8": "^1.2.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0"
+  }
+}

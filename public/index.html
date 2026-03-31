@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phoenix LOB · SOL/USDC</title>
+<style>
+  :root {
+    --bg: #0d0f14; --bg2: #13161e; --bg3: #1a1d28;
+    --border: #2a2d3a; --text: #e2e4ec; --muted: #6b7080;
+    --green: #1d9e75; --green-dim: rgba(29,158,117,.12);
+    --red: #e24b4a; --red-dim: rgba(226,75,74,.12);
+    --blue: #4a9eff; --accent: #8b5cf6;
+    --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 12px; overflow: hidden; }
+
+  /* ── Layout ── */
+  .app { display: grid; grid-template-columns: 220px 1fr 200px 220px; grid-template-rows: 44px 1fr 160px; height: 100vh; gap: 1px; background: var(--border); }
+  .header { grid-column: 1/-1; background: var(--bg2); display: flex; align-items: center; gap: 20px; padding: 0 16px; border-bottom: 1px solid var(--border); }
+  .book-panel    { background: var(--bg2); grid-row: 2; overflow: hidden; }
+  .chart-panel   { background: var(--bg2); grid-row: 2; }
+  .order-panel   { background: var(--bg2); grid-row: 2; }
+  .position-panel{ background: var(--bg2); grid-row: 2; }
+  .footer        { grid-column: 1/-1; background: var(--bg2); overflow: hidden; }
+
+  /* ── Shared ── */
+  .pane-title { font-size: 10px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; padding: 8px 10px 6px; border-bottom: 1px solid var(--border); }
+  .row { display: grid; padding: 2px 10px; align-items: center; }
+  .row:hover { background: var(--bg3); }
+  .ask { color: var(--red); } .bid { color: var(--green); }
+  .muted { color: var(--muted); }
+  .green { color: var(--green); } .red { color: var(--red); }
+  .tag { font-size: 9px; padding: 1px 5px; border-radius: 2px; font-weight: 600; letter-spacing: .04em; }
+  .tag-buy  { background: var(--green-dim); color: var(--green); }
+  .tag-sell { background: var(--red-dim);   color: var(--red);   }
+
+  /* ── Header ── */
+  .logo { font-size: 13px; font-weight: 700; color: var(--text); letter-spacing: -.02em; }
+  .logo span { color: var(--accent); }
+  .pair { font-size: 14px; font-weight: 700; }
+  .price-display { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stat { display: flex; flex-direction: column; }
+  .stat-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .stat-value { font-size: 12px; font-weight: 600; margin-top: 1px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); margin-left: auto; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+  .conn-status { font-size: 10px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+
+  /* ── Order Book ── */
+  #book-panel { display: flex; flex-direction: column; }
+  .book-hdr { display: grid; grid-template-columns: 68px 54px 1fr; padding: 4px 10px; font-size: 10px; color: var(--muted); }
+  .book-asks, .book-bids { flex: 1; overflow: hidden; }
+  .book-row { display: grid; grid-template-columns: 68px 54px 1fr; padding: 1px 10px; position: relative; cursor: default; font-variant-numeric: tabular-nums; }
+  .depth-bar { position: absolute; right: 0; top: 0; bottom: 0; }
+  .ask-bar { background: var(--red); opacity: .1; }
+  .bid-bar { background: var(--green); opacity: .1; }
+  .spread-bar { display: flex; justify-content: space-between; align-items: center; padding: 4px 10px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .mid-val { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  /* ── Chart (price history sparkline) ── */
+  #chart-panel { display: flex; flex-direction: column; }
+  #price-canvas { flex: 1; width: 100%; }
+
+  /* ── Order entry ── */
+  #order-panel { display: flex; flex-direction: column; padding: 0; }
+  .order-form { padding: 10px; flex: 1; display: flex; flex-direction: column; gap: 8px; }
+  .seg-ctrl { display: flex; gap: 4px; }
+  .seg { flex: 1; height: 26px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-family: var(--mono); font-size: 11px; cursor: pointer; border-radius: 3px; }
+  .seg.active { background: var(--bg3); color: var(--text); border-color: #3a3d50; }
+  .field { display: flex; flex-direction: column; gap: 3px; }
+  .field label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .field input, .field select { height: 30px; background: var(--bg3); border: 1px solid var(--border); color: var(--text); font-family: var(--mono); font-size: 11px; padding: 0 8px; border-radius: 3px; width: 100%; }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--accent); }
+  .field select option { background: var(--bg2); }
+  .submit-btn { height: 34px; border: none; cursor: pointer; font-family: var(--mono); font-size: 12px; font-weight: 700; border-radius: 3px; letter-spacing: .04em; transition: opacity .15s; }
+  .submit-btn:hover { opacity: .85; }
+  .btn-buy  { background: var(--green); color: #fff; }
+  .btn-sell { background: var(--red);   color: #fff; }
+  .order-est { font-size: 10px; color: var(--muted); text-align: center; min-height: 14px; }
+
+  /* ── Position ── */
+  #position-panel { overflow-y: auto; }
+  .pos-row { display: flex; justify-content: space-between; padding: 5px 10px; border-bottom: 1px solid var(--border); font-size: 11px; }
+  .pos-label { color: var(--muted); }
+
+  /* ── Footer trades ── */
+  #footer { display: flex; gap: 1px; height: 160px; }
+  .footer-pane { flex: 1; background: var(--bg2); display: flex; flex-direction: column; overflow: hidden; }
+  .trade-row { display: grid; grid-template-columns: 60px 60px 60px 1fr; padding: 2px 10px; font-size: 11px; font-variant-numeric: tabular-nums; }
+  .trade-row:nth-child(even) { background: var(--bg3); }
+  .my-fill-row { display: grid; grid-template-columns: 60px 60px 60px 60px 1fr; padding: 2px 10px; font-size: 11px; font-variant-numeric: tabular-nums; }
+  .my-fill-row:nth-child(even) { background: var(--bg3); }
+
+  /* ── Toast ── */
+  #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); padding: 7px 16px; border-radius: 4px; font-size: 11px; font-weight: 600; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 100; }
+  #toast.show { opacity: 1; }
+  #toast.ok   { background: var(--green-dim); color: var(--green); border: 1px solid var(--green); }
+  #toast.err  { background: var(--red-dim);   color: var(--red);   border: 1px solid var(--red); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <header class="header">
+    <div class="logo">Phoenix<span>LOB</span></div>
+    <div class="pair">SOL/USDC</div>
+    <div class="price-display" id="hdr-price">—</div>
+    <div class="stat"><span class="stat-label">24h Change</span><span class="stat-value" id="hdr-change">—</span></div>
+    <div class="stat"><span class="stat-label">Spread</span><span class="stat-value" id="hdr-spread">—</span></div>
+    <div class="stat"><span class="stat-label">Mid</span><span class="stat-value" id="hdr-mid">—</span></div>
+    <div class="stat"><span class="stat-label">Best Bid</span><span class="stat-value green" id="hdr-bid">—</span></div>
+    <div class="stat"><span class="stat-label">Best Ask</span><span class="stat-value red" id="hdr-ask">—</span></div>
+    <div class="conn-status" style="margin-left:auto"><div class="dot" id="conn-dot" style="background:var(--muted)"></div><span id="conn-label">connecting</span></div>
+  </header>
+
+  <!-- Order Book -->
+  <div class="book-panel" id="book-panel">
+    <div class="pane-title">Order book</div>
+    <div class="book-hdr"><span>Price</span><span>Size</span><span>Total</span></div>
+    <div class="book-asks" id="book-asks" style="display:flex;flex-direction:column-reverse;overflow:hidden"></div>
+    <div class="spread-bar">
+      <span class="muted" style="font-size:10px">SPREAD</span>
+      <span class="mid-val" id="mid-price-disp">—</span>
+      <span class="muted" id="spread-disp" style="font-size:10px">—</span>
+    </div>
+    <div class="book-bids" id="book-bids" style="overflow:hidden"></div>
+  </div>
+
+  <!-- Price chart -->
+  <div id="chart-panel" class="chart-panel">
+    <div class="pane-title">Price history (mid)</div>
+    <canvas id="price-canvas"></canvas>
+  </div>
+
+  <!-- Order entry -->
+  <div id="order-panel" class="order-panel">
+    <div class="pane-title">Place order</div>
+    <div class="order-form">
+      <div class="seg-ctrl">
+        <button class="seg active" id="seg-limit"  onclick="setType('limit')">Limit</button>
+        <button class="seg"        id="seg-market" onclick="setType('market')">Market</button>
+      </div>
+      <div class="field">
+        <label>Side</label>
+        <select id="f-side" onchange="updateBtn()">
+          <option value="buy">Buy / Long</option>
+          <option value="sell">Sell / Short</option>
+        </select>
+      </div>
+      <div class="field" id="price-field">
+        <label>Price (USDC)</label>
+        <input type="number" id="f-price" step="0.05" placeholder="142.50" oninput="updateEst()">
+      </div>
+      <div class="field">
+        <label>Size (SOL)</label>
+        <input type="number" id="f-size" step="0.1" placeholder="1.0" oninput="updateEst()">
+      </div>
+      <div class="order-est" id="order-est"></div>
+      <button class="submit-btn btn-buy" id="submit-btn" onclick="placeOrder()">BUY / LONG</button>
+    </div>
+  </div>
+
+  <!-- Position -->
+  <div id="position-panel" class="position-panel">
+    <div class="pane-title">Position &amp; PnL</div>
+    <div id="pos-rows"></div>
+    <div class="pane-title" style="margin-top:4px">Open orders</div>
+    <div id="open-orders-list"></div>
+  </div>
+
+  <!-- Footer -->
+  <div id="footer" class="footer">
+    <div class="footer-pane">
+      <div class="pane-title">Market trades</div>
+      <div class="trade-row muted" style="font-size:10px"><span>Price</span><span>Size</span><span>Side</span><span>Seq</span></div>
+      <div id="market-trades"></div>
+    </div>
+    <div class="footer-pane">
+      <div class="pane-title">My fills</div>
+      <div class="my-fill-row muted" style="font-size:10px"><span>Price</span><span>Size</span><span>Side</span><span>PnL</span><span>Time</span></div>
+      <div id="my-fills"></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let ws = null;
+let snap = null;
+let priceHistory = [];
+let orderType = 'limit';
+const myOrderIds = new Set();
+const myFills = [];
+const position = { size: 0, avgPrice: 0, realized: 0 };
+
+// ── WebSocket ──────────────────────────────────────────────────────────────
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${proto}//${location.host}`);
+
+  ws.onopen = () => {
+    setConn(true);
+    ws.send(JSON.stringify({ type: 'subscribe' }));
+  };
+
+  ws.onclose = () => {
+    setConn(false);
+    setTimeout(connect, 2000);
+  };
+
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'snapshot') {
+      snap = msg;
+      if (snap.midPrice) priceHistory.push(snap.midPrice);
+      if (priceHistory.length > 200) priceHistory.shift();
+      render();
+    } else if (msg.type === 'fill') {
+      handleFill(msg.fill);
+    } else if (msg.type === 'ack') {
+      handleAck(msg.result);
+    } else if (msg.type === 'error') {
+      toast(msg.message, true);
+    }
+  };
+}
+
+function setConn(up) {
+  document.getElementById('conn-dot').style.background = up ? 'var(--green)' : 'var(--muted)';
+  document.getElementById('conn-label').textContent = up ? 'live' : 'reconnecting…';
+}
+
+// ── Order placement ────────────────────────────────────────────────────────
+function placeOrder() {
+  const side = document.getElementById('f-side').value;
+  const size = parseFloat(document.getElementById('f-size').value);
+  if (!size || size <= 0) { toast('Enter a valid size', true); return; }
+
+  if (orderType === 'limit') {
+    const price = parseFloat(document.getElementById('f-price').value);
+    if (!price || price <= 0) { toast('Enter a valid price', true); return; }
+    const cid = `ui-${Date.now()}`;
+    ws.send(JSON.stringify({ type: 'limit', side, price, size, clientOrderId: cid }));
+  } else {
+    ws.send(JSON.stringify({ type: 'market', side, size, clientOrderId: `ui-mkt-${Date.now()}` }));
+  }
+}
+
+function handleAck(result) {
+  if (result.status === 'rejected') {
+    toast(result.message || 'Order rejected', true);
+    return;
+  }
+  const o = result.order;
+  if (o.status === 'open' || o.status === 'partial') {
+    myOrderIds.add(o.id);
+  }
+  const filled = o.size - o.remaining;
+  if (filled > 0) {
+    updatePosition(result.fills, o.side);
+    toast(`Filled ${filled.toFixed(3)} SOL @ avg $${avgFillPrice(result.fills).toFixed(2)}`);
+  } else {
+    toast(`Resting ${o.size.toFixed(3)} SOL @ $${o.price.toFixed(2)}`);
+  }
+}
+
+function handleFill(fill) {
+  if (myOrderIds.has(fill.makerOrderId) || myOrderIds.has(fill.takerOrderId)) {
+    const isMaker = myOrderIds.has(fill.makerOrderId);
+    const side = isMaker ? (fill.side === 'buy' ? 'sell' : 'buy') : fill.side;
+    myFills.unshift({ ...fill, side, isMaker });
+    if (myFills.length > 20) myFills.pop();
+    updatePosition([fill], side);
+    renderMyFills();
+    renderPosition();
+  }
+}
+
+function avgFillPrice(fills) {
+  const total = fills.reduce((s, f) => s + f.price * f.size, 0);
+  const size  = fills.reduce((s, f) => s + f.size, 0);
+  return size > 0 ? total / size : 0;
+}
+
+function updatePosition(fills, side) {
+  for (const f of fills) {
+    if (side === 'buy') {
+      const cost = position.size * position.avgPrice + f.size * f.price;
+      position.size += f.size;
+      position.avgPrice = position.size > 0 ? cost / position.size : 0;
+    } else {
+      if (position.size > 0) {
+        const closed = Math.min(f.size, position.size);
+        position.realized += closed * (f.price - position.avgPrice);
+        position.size -= closed;
+        if (position.size < 0.0001) { position.size = 0; position.avgPrice = 0; }
+      } else {
+        const cost = Math.abs(position.size) * position.avgPrice + f.size * f.price;
+        position.size -= f.size;
+        position.avgPrice = Math.abs(position.size) > 0 ? cost / Math.abs(position.size) : 0;
+      }
+    }
+  }
+  renderPosition();
+}
+
+// ── Rendering ─────────────────────────────────────────────────────────────
+const fmt2 = n => n.toFixed(2);
+const fmt3 = n => n.toFixed(3);
+const fmtTime = ts => new Date(ts).toLocaleTimeString('en-US', { hour12: false });
+
+let lastMid = null;
+
+function render() {
+  if (!snap) return;
+  renderHeader();
+  renderBook();
+  renderTrades();
+  renderChart();
+  renderPosition();
+}
+
+function renderHeader() {
+  const mid = snap.midPrice;
+  const dir = lastMid !== null && mid !== null ? (mid > lastMid ? 'var(--green)' : mid < lastMid ? 'var(--red)' : 'var(--text)') : 'var(--text)';
+  document.getElementById('hdr-price').textContent  = mid ? fmt2(mid) : '—';
+  document.getElementById('hdr-price').style.color  = dir;
+  document.getElementById('hdr-mid').textContent    = mid ? fmt2(mid) : '—';
+  document.getElementById('hdr-bid').textContent    = snap.bestBid ? fmt2(snap.bestBid) : '—';
+  document.getElementById('hdr-ask').textContent    = snap.bestAsk ? fmt2(snap.bestAsk) : '—';
+  document.getElementById('hdr-spread').textContent = snap.spread  ? fmt2(snap.spread) + ' USDC' : '—';
+  document.getElementById('mid-price-disp').textContent = mid ? fmt2(mid) : '—';
+  document.getElementById('spread-disp').textContent    = snap.spread ? fmt2(snap.spread) + ' USDC' : '—';
+  if (snap.lastTradePrice) {
+    document.getElementById('hdr-change').textContent = snap.lastTradePrice ? fmt2(snap.lastTradePrice) : '—';
+  }
+  lastMid = mid;
+}
+
+function renderBook() {
+  const asks = snap.asks.slice(0, 12);
+  const bids = snap.bids.slice(0, 12);
+  const allSizes = [...asks, ...bids].map(l => l.totalSize);
+  const maxSz = Math.max(...allSizes, 0.01);
+
+  let cumAsk = 0;
+  document.getElementById('book-asks').innerHTML = asks.map(l => {
+    cumAsk += l.totalSize;
+    const pct = (l.totalSize / maxSz * 100).toFixed(1);
+    return `<div class="book-row ask"><span>${fmt2(l.price)}</span><span>${fmt3(l.totalSize)}</span><span class="muted">${fmt3(cumAsk)}</span><div class="depth-bar ask-bar" style="width:${pct}%"></div></div>`;
+  }).reverse().join('');
+
+  let cumBid = 0;
+  document.getElementById('book-bids').innerHTML = bids.map(l => {
+    cumBid += l.totalSize;
+    const pct = (l.totalSize / maxSz * 100).toFixed(1);
+    return `<div class="book-row bid"><span>${fmt2(l.price)}</span><span>${fmt3(l.totalSize)}</span><span class="muted">${fmt3(cumBid)}</span><div class="depth-bar bid-bar" style="width:${pct}%"></div></div>`;
+  }).join('');
+}
+
+function renderTrades() {
+  if (!snap.fills) return;
+  document.getElementById('market-trades').innerHTML = snap.fills.slice(0, 14).map(f =>
+    `<div class="trade-row"><span class="${f.side==='buy'?'green':'red'}">${fmt2(f.price)}</span><span>${fmt3(f.size)}</span><span class="tag tag-${f.side}">${f.side}</span><span class="muted">#${f.tradeSeq}</span></div>`
+  ).join('');
+}
+
+function renderMyFills() {
+  document.getElementById('my-fills').innerHTML = myFills.slice(0, 14).map(f => {
+    const pnl = f.isMaker ? '' : '';
+    return `<div class="my-fill-row"><span class="${f.side==='buy'?'green':'red'}">${fmt2(f.price)}</span><span>${fmt3(f.size)}</span><span class="tag tag-${f.side}">${f.side}</span><span>${pnl}</span><span class="muted">${fmtTime(f.timestamp)}</span></div>`;
+  }).join('');
+}
+
+function renderPosition() {
+  const mid = (snap && snap.midPrice) || position.avgPrice || 0;
+  const unrealized = position.size * (mid - position.avgPrice);
+  const posDir = position.size > 0 ? 'green' : position.size < 0 ? 'red' : 'muted';
+  const pnlClass = n => n >= 0 ? 'green' : 'red';
+  const fmtPnl = n => (n >= 0 ? '+' : '') + n.toFixed(2);
+
+  document.getElementById('pos-rows').innerHTML = `
+    <div class="pos-row"><span class="pos-label">Size</span><span class="${posDir}">${position.size.toFixed(3)} SOL</span></div>
+    <div class="pos-row"><span class="pos-label">Entry price</span><span>${position.avgPrice ? fmt2(position.avgPrice) : '—'}</span></div>
+    <div class="pos-row"><span class="pos-label">Mark price</span><span>${mid ? fmt2(mid) : '—'}</span></div>
+    <div class="pos-row"><span class="pos-label">Unrealized PnL</span><span class="${pnlClass(unrealized)}">${fmtPnl(unrealized)} USDC</span></div>
+    <div class="pos-row"><span class="pos-label">Realized PnL</span><span class="${pnlClass(position.realized)}">${fmtPnl(position.realized)} USDC</span></div>
+  `;
+}
+
+// ── Canvas price chart ─────────────────────────────────────────────────────
+function renderChart() {
+  const canvas = document.getElementById('price-canvas');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const W = rect.width * dpr;
+  const H = (rect.height - 32) * dpr; // subtract pane-title height
+  canvas.width = W; canvas.height = H;
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = (rect.height - 32) + 'px';
+  ctx.scale(dpr, dpr);
+  const w = W / dpr, h = H / dpr;
+
+  if (priceHistory.length < 2) return;
+
+  const prices = priceHistory;
+  const min = Math.min(...prices) * 0.9998;
+  const max = Math.max(...prices) * 1.0002;
+  const range = max - min || 1;
+  const px = (p) => ((p - min) / range) * (h - 20) + 10;
+  const py = (i) => (i / (prices.length - 1)) * w;
+
+  ctx.clearRect(0, 0, w, h);
+
+  // Grid lines
+  ctx.strokeStyle = '#1e2130';
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 4; i++) {
+    const y = 10 + (i / 4) * (h - 20);
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    const val = max - (i / 4) * range;
+    ctx.fillStyle = '#4a4f65'; ctx.font = '9px ' + getComputedStyle(document.body).fontFamily;
+    ctx.fillText(fmt2(val), 2, y - 2);
+  }
+
+  // Fill
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, 'rgba(138,92,246,.25)');
+  grad.addColorStop(1, 'rgba(138,92,246,0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(py(0), h);
+  prices.forEach((p, i) => ctx.lineTo(py(i), h - px(p)));
+  ctx.lineTo(py(prices.length - 1), h);
+  ctx.closePath(); ctx.fill();
+
+  // Line
+  ctx.strokeStyle = '#8b5cf6'; ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  prices.forEach((p, i) => i === 0 ? ctx.moveTo(py(i), h - px(p)) : ctx.lineTo(py(i), h - px(p)));
+  ctx.stroke();
+
+  // Last price label
+  const last = prices[prices.length - 1];
+  const lx = py(prices.length - 1) - 40, ly = h - px(last) - 5;
+  ctx.fillStyle = '#8b5cf6'; ctx.font = `bold 10px ${getComputedStyle(document.body).fontFamily}`;
+  ctx.fillText(fmt2(last), Math.max(0, lx), Math.max(12, ly));
+}
+
+// ── UI helpers ─────────────────────────────────────────────────────────────
+function setType(t) {
+  orderType = t;
+  document.getElementById('seg-limit').classList.toggle('active', t === 'limit');
+  document.getElementById('seg-market').classList.toggle('active', t === 'market');
+  document.getElementById('price-field').style.display = t === 'limit' ? '' : 'none';
+  updateEst();
+}
+
+function updateBtn() {
+  const side = document.getElementById('f-side').value;
+  const btn = document.getElementById('submit-btn');
+  btn.textContent = side === 'buy' ? 'BUY / LONG' : 'SELL / SHORT';
+  btn.className = 'submit-btn ' + (side === 'buy' ? 'btn-buy' : 'btn-sell');
+  updateEst();
+}
+
+function updateEst() {
+  const side = document.getElementById('f-side').value;
+  const size = parseFloat(document.getElementById('f-size').value) || 0;
+  let price;
+  if (orderType === 'limit') price = parseFloat(document.getElementById('f-price').value) || 0;
+  else price = (snap && (side === 'buy' ? snap.bestAsk : snap.bestBid)) || 0;
+  const notional = price * size;
+  document.getElementById('order-est').textContent =
+    notional > 0 ? `≈ $${notional.toFixed(2)} USDC notional` : '';
+}
+
+function toast(msg, isErr = false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show ' + (isErr ? 'err' : 'ok');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.className = ''; }, 2500);
+}
+
+window.addEventListener('resize', renderChart);
+connect();
+</script>
+</body>
+</html>
