@@ -1,6 +1,6 @@
 # Phoenix LOB
 
-A **limit order book matching engine** built in TypeScript — inspired by [Ellipsis Labs'](https://ellipsis.trade) Phoenix on Solana.
+A **limit order book matching engine** built in TypeScript inspired by [Ellipsis Labs'](https://ellipsis.trade) Phoenix on Solana.
 
 ## What's inside
 
@@ -47,18 +47,6 @@ npm test                  # run all tests once
 npm run test:watch        # watch mode
 npm run test:coverage     # coverage report
 ```
-
-All 25+ tests pass:
-- Basic resting order placement
-- Full fill (buy meets sell at same price)
-- Price improvement (taker pays maker's price)
-- Partial fill (remainder rests / is discarded)
-- Price-time priority (FIFO within level)
-- Multi-level sweep (market order walks the book)
-- Cancel — removes from level, leaves others intact
-- Snapshot correctness (sorted bids/asks, mid, spread)
-- Event emission (`fill`, `orderCancelled`)
-- Sequence number monotonicity
 
 ## REST API
 
