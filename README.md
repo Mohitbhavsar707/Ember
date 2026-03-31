@@ -1,6 +1,6 @@
 # Phoenix LOB
 
-A **limit order book matching engine** built in TypeScript inspired by [Ellipsis Labs'](https://ellipsis.trade) Phoenix on Solana.
+A **limit order book matching engine** built in TypeScript inspired by [Ellipsis Labs']https://www.ellipsislabs.xyz/ Phoenix on Solana.
 
 ## What's inside
 
